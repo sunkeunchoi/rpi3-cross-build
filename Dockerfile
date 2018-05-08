@@ -5,29 +5,12 @@ ARG CROSSTOOL_NG_VERSION="crosstool-ng-1.23.0"
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  sudo \
-  locales \
-  git \
-  wget \
-  curl \
-  gcc \
-  g++ \
-  cmake \
-  autoconf \
-  automake \
-  libtool \
-  build-essential \
-  pkg-config \
-  gperf \
-  bison \
-  flex \
-  texinfo \
-  bzip2 \
-  xz-utils \
-  help2man \
-  gawk \
-  make \
-  libncurses5-dev \
+  sudo git wget curl \
+  gcc g++ cmake autoconf automake libtool build-essential pkg-config \
+  gperf bison flex texinfo bzip2 xz-utils help2man gawk make libncurses5-dev \
+  python python-dev python-pip \
+  python3 python3-dev python3-pip \
+  htop apt-utils locales ca-certificates \
   libomxil-bellagio-dev \
   && apt-get clean && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
@@ -75,9 +58,16 @@ ENV PATH ${HOME}/.local/bin:$PATH
 RUN echo "export PATH=$PATH" >> ${HOME}/.bashrc
 CMD ["/bin/bash"]
 
+RUN mkdir -p ${HOME}/src
 RUN mkdir armv8-rpi3-linux-gnueabihf \
   && cd armv8-rpi3-linux-gnueabihf \
   && ct-ng armv8-rpi3-linux-gnueabihf \
+  && awk '!/CT_CC_GCC_VERSION=/' .config > temp \
+  && echo 'CT_CC_GCC_VERSION="linaro-6.3-2017.02"' >> temp && mv temp .config \
+  && sed 's/^# CT_EXPERIMENTAL is not set/CT_EXPERIMENTAL=y/' -i .config \
+  && sed 's/^# CT_CREATE_LDSO_CONF is not set/CT_CREATE_LDSO_CONF=y/' -i .config \
+  && sed 's/^# CT_CC_GCC_SHOW_LINARO is not set/CT_CC_GCC_SHOW_LINARO=y/' -i .config \
+  && sed 's/^CT_CC_GCC_V_6_3_0=y/# CT_CC_GCC_V_6_3_0 is not set/' -i .config \
   && sed 's/^# CT_CC_GCC_LIBGOMP is not set/CT_CC_GCC_LIBGOMP=y/' -i .config \
   && sed 's/CT_LOG_PROGRESS_BAR/# CT_LOG_PROGRESS_BAR/' -i .config \
   && ct-ng build \
@@ -88,6 +78,12 @@ ENV PATH $HOME/x-tools/armv8-rpi3-linux-gnueabihf/bin:$PATH
 RUN mkdir aarch64-rpi3-linux-gnueabihf \
   && cd aarch64-rpi3-linux-gnueabihf \
   && ct-ng aarch64-rpi3-linux-gnueabi \
+  && awk '!/CT_CC_GCC_VERSION=/' .config > temp \
+  && echo 'CT_CC_GCC_VERSION="linaro-6.3-2017.02"' >> temp && mv temp .config \
+  && sed 's/^# CT_EXPERIMENTAL is not set/CT_EXPERIMENTAL=y/' -i .config \
+  && sed 's/^# CT_CREATE_LDSO_CONF is not set/CT_CREATE_LDSO_CONF=y/' -i .config \
+  && sed 's/^# CT_CC_GCC_SHOW_LINARO is not set/CT_CC_GCC_SHOW_LINARO=y/' -i .config \
+  && sed 's/^CT_CC_GCC_V_6_3_0=y/# CT_CC_GCC_V_6_3_0 is not set/' -i .config \
   && sed 's/^CT_ARCH_FLOAT="auto"/CT_ARCH_FLOAT="hard"/' -i .config \
   && echo 'CT_ARCH_ARM_TUPLE_USE_EABIHF=y' >> .config \
   && sed 's/^# CT_CC_GCC_LIBGOMP is not set/CT_CC_GCC_LIBGOMP=y/' -i .config \
