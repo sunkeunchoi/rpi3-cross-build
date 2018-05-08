@@ -1,12 +1,12 @@
 FROM debian:stretch
 
-ARG RPI_FIRMWARE_BASE_URL='http://archive.raspberrypi.org/debian/pool/main/r/raspberrypi-firmware'
-ARG RPI_FIRMWARE_VERSION='20180313-1'
+ARG CROSSTOOL_NG_VERSION="crosstool-ng-1.23.0"
 
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   sudo \
+  locales \
   git \
   wget \
   curl \
@@ -28,19 +28,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   gawk \
   make \
   libncurses5-dev \
-  python \
-  python-dev \
-  python-pip \
-  python3 \
-  python3-dev \
-  python3-pip \
-  htop \
-  apt-utils \
-  locales \
-  ca-certificates \
+  libomxil-bellagio-dev \
   && apt-get clean && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
 WORKDIR /tmp
+ARG RPI_FIRMWARE_BASE_URL='http://archive.raspberrypi.org/debian/pool/main/r/raspberrypi-firmware'
+ARG RPI_FIRMWARE_VERSION='20180417-1'
 
 RUN wget -O /tmp/libraspberrypi0_1.${RPI_FIRMWARE_VERSION}_armhf.deb \
   ${RPI_FIRMWARE_BASE_URL}/libraspberrypi0_1.${RPI_FIRMWARE_VERSION}_armhf.deb \
@@ -51,11 +44,57 @@ RUN wget -O /tmp/libraspberrypi0_1.${RPI_FIRMWARE_VERSION}_armhf.deb \
   && sed -i 's/^Libs:.*$/\0 -lvcos/' /opt/vc/lib/pkgconfig/vcsm.pc \
   && rm /tmp/libraspberrypi0_1.${RPI_FIRMWARE_VERSION}_armhf.deb /tmp/libraspberrypi-dev_1.${RPI_FIRMWARE_VERSION}_armhf.deb
 
-RUN curl -sLO http://crosstool-ng.org/download/crosstool-ng/crosstool-ng-1.23.0.tar.xz \
-  && tar xvJf crosstool-ng-1.23.0.tar.xz \
-  && cd crosstool-ng-1.23.0 \
-  && ./configure \
+RUN curl -sLO http://crosstool-ng.org/download/crosstool-ng/${CROSSTOOL_NG_VERSION}.tar.xz \
+  && tar xvJf ${CROSSTOOL_NG_VERSION}.tar.xz \
+  && cd ${CROSSTOOL_NG_VERSION} \
+  && ./configure --prefix=/opt/cross \
   && make \
   && make install \
   && cd .. \
-  && rm -rf crosstool-ng-1.23.0 crosstool-ng-1.23.0.tar.xz
+  && rm -rf ${CROSSTOOL_NG_VERSION} ${CROSSTOOL_NG_VERSION}.tar.xz
+ENV PATH /opt/cross/bin:$PATH
+ARG USER_NAME="pi3"
+
+RUN useradd -m ${USER_NAME} \
+  && echo  ${USER_NAME}:${USER_NAME} | chpasswd \
+  && adduser ${USER_NAME} sudo \
+  && echo "${USER_NAME} ALL=NOPASSWD: ALL" >> /etc/sudoers.d/${USER_NAME}
+
+USER ${USER_NAME}
+WORKDIR /home/${USER_NAME}
+ENV HOME /home/${USER_NAME}
+
+# set locale
+RUN sudo sed 's/.*en_US.UTF-8/en_US.UTF-8/' -i /etc/locale.gen
+RUN sudo locale-gen
+RUN sudo update-locale LANG=en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+ENV PATH ${HOME}/.local/bin:$PATH
+RUN echo "export PATH=$PATH" >> ${HOME}/.bashrc
+CMD ["/bin/bash"]
+
+RUN mkdir armv8-rpi3-linux-gnueabihf \
+  && cd armv8-rpi3-linux-gnueabihf \
+  && ct-ng armv8-rpi3-linux-gnueabihf \
+  && sed 's/^# CT_CC_GCC_LIBGOMP is not set/CT_CC_GCC_LIBGOMP=y/' -i .config \
+  && sed 's/CT_LOG_PROGRESS_BAR/# CT_LOG_PROGRESS_BAR/' -i .config \
+  && ct-ng build \
+  && cd .. \
+  && rm -rf armv8-rpi3-linux-gnueabihf
+ENV PATH $HOME/x-tools/armv8-rpi3-linux-gnueabihf/bin:$PATH
+
+RUN mkdir aarch64-rpi3-linux-gnueabihf \
+  && cd aarch64-rpi3-linux-gnueabihf \
+  && ct-ng aarch64-rpi3-linux-gnueabi \
+  && sed 's/^CT_ARCH_FLOAT="auto"/CT_ARCH_FLOAT="hard"/' -i .config \
+  && echo 'CT_ARCH_ARM_TUPLE_USE_EABIHF=y' >> .config \
+  && sed 's/^# CT_CC_GCC_LIBGOMP is not set/CT_CC_GCC_LIBGOMP=y/' -i .config \
+  && sed 's/CT_LOG_PROGRESS_BAR/# CT_LOG_PROGRESS_BAR/' -i .config \
+  && ct-ng build \
+  && cd .. \
+  && rm -rf aarch64-rpi3-linux-gnueabihf
+ENV PATH $HOME/x-tools/aarch64-rpi3-linux-gnueabihf/bin:$PATH
+
+RUN echo "export PATH=$PATH" >> ${HOME}/.bashrc
